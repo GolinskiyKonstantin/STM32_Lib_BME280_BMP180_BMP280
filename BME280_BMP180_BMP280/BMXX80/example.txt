@@ -1,0 +1,219 @@
+/*	сохраняем данный файл в кодировке UTF-8		*/
+
+
+/*
+
+	данная библиотека работает с датчиками BMP180  BMP280   BME280
+	
+//#############  SETUP   ########################################################
+	
+	//== выбераем датчик ( нужное раскоментировать )========================
+	
+		//#define BMP180	//	BMP180
+	#ifndef BMP180
+		#define BMP280		//	BMP280
+	#ifndef BMP280
+		//#define BME280	//	BME280
+	#endif
+	#endif
+	
+	//======================================================================
+	
+	
+	//== выбираем I2C address ==============================================
+
+	#ifdef BMP180
+		#define BMP180_I2CADDR	0xEE			// 0x77<<1	SDO -> VCC
+	#endif
+
+	#ifdef BMP280
+		//#define BMP280_I2CADDR	0xEC		// 0x76<<1	SDO -> GND
+		#define BMP280_I2CADDR	0xEE			// 0x77<<1	SDO -> VCC
+	#endif
+
+	#ifdef BME280
+		//#define BME280_I2CADDR	0xEC		// 0x76<<1	SDO -> GND
+		#define BME280_I2CADDR	0xEE			// 0x77<<1	SDO -> VCC
+	#endif
+	
+	//=======================================================================
+	
+	//также есть настройки таймера в файле delays.c там все описано
+	
+	// не забываем шину I2C притягивать резисторами к питанию если на датчике не предусмотрено
+	
+//###############################################################################
+
+*/
+
+/*
+
+  Работает только с одним датчиком на шине.
+  
+	Vcc - 	питание, от 1.8 до 3.6В, подключаем к пину 3.3V
+	GND - 	земля (ground), он же минус, у датчика два таких пина, ОБА подключаем к "GND"
+	CSB - 	должен быть соединен с Vcc для выбора I2C режима
+	SDI - 	подключаем к SDA пину I2C порта процессора
+	SCK - 	к SCL пину того же I2C порта
+	SDO - 	тут как захочется, это конфигурация адреса устройства, если пин подключен к GND - бит 0 в адресе будет равен нулю, к Vcc - бит единица
+			SDO to Ground для адреса 0x76  , а для адреса 0x77 нечего не делаем.
+	VDDIO - задает "вольтаж логики" датчика, просто подключаем туда же, куда и пин Vсс
+ 
+	характеристики:
+	
+	Supply Voltage: 1.8 - 3.6V DC
+	
+	Interface: I2C (up to 3.4MHz), SPI (up to 10 MHz)
+	
+	Operational Range:
+	Temperature: -40 to +85°C
+	Humidity: 0-100%
+	Pressure: 300-1100 hPa
+	
+	Resolution:
+	Temperature: 0.01°C
+	Humidity: 0.008%
+	Pressure: 0.18Pa
+	
+	Accuracy:
+	Temperature: +-1°C
+	Humidity: +-3%
+	Pressure: +-1Pa
+	
+	I2C address
+	SDO LOW :0x76
+	SDO HIGH:0x77
+	
+ */
+  
+  
+  
+	#include "BMPXX80.h"
+	#include "delays.h"
+	
+	
+	
+	float temperature, huminidity;
+	int32_t pressure;
+	
+	
+	.........
+	.........
+
+main()=============================================================================================================================
+	
+	// запускаем таймер для функции Delay_us()
+	// указываем нах хендл таймера htim1
+	HAL_TIM_Base_Start( &htim1 );
+	
+	
+	
+	// инициализация датчиков ----------------------------------------------------
+	// указываем хендл i2c порта hi2c2 , также можем менять режимы ( данные в файле BMPXX0.h )
+	#ifdef BMP180
+		BMP180_Init( &hi2c2, BMP180_STANDARD );
+	#endif
+	
+	#ifdef BMP280
+		BMP280_Init( &hi2c2, BMP280_TEMPERATURE_16BIT, BMP280_STANDARD, BMP280_FORCEDMODE );
+		BMP280_SetConfig( BMP280_STANDBY_MS_10, BMP280_FILTER_OFF );
+	#endif
+	
+	#ifdef BME280
+		BME280_Init( &hi2c2, BME280_TEMPERATURE_16BIT, BME280_PRESSURE_ULTRALOWPOWER, BME280_HUMINIDITY_STANDARD, BME280_NORMALMODE );
+		BME280_SetConfig( BME280_STANDBY_MS_10, BME280_FILTER_OFF );
+	#endif
+	
+	HAL_Delay(3000);
+	//----------------------------------------------------------------------------
+	
+	
+	
+	.........
+	.........
+	.........
+
+while(1)===========================================================================================================================
+
+
+		  //////////////////////////////////////////////////////////////////////////////
+	  
+	  
+	  
+#ifdef BMP180
+
+	  float temperature = BMP180_ReadTemperature();
+	  Delay_us(500);
+	  int32_t pressure = BMP180_ReadPressure();
+	  Delay_us(500);
+	  
+#endif
+
+
+#ifdef BMP280
+
+	  BMP280_ReadTemperatureAndPressure(&temperature, &pressure);
+	  
+#endif
+
+
+#ifdef BME280
+
+	  BME280_ReadTemperatureAndPressureAndHuminidity(&temperature, &pressure, &huminidity);
+	  
+#endif
+
+
+#ifdef BMP180
+	  printf("BMP180 \r\n");
+#endif
+#ifdef BMP280
+	  printf("BMP280 \r\n");
+#endif
+#ifdef BME280
+	  printf("BME280 \r\n");
+#endif
+
+
+		// °F = ( °C * 1.8000 ) + 32.00
+		
+	  printf("Temp: %.2f C \r\n", temperature );					// °C
+	  printf("Temp: %.2f F \r\n", ( temperature * 1.8 ) + 32.0 );	// °F
+
+#ifdef BME280
+
+	  // точка росы
+		float dewpoint_temperature = ( 237.7 * ( ((17.27 * temperature )/(237.7 + temperature)) + logf( huminidity/100 ) ) ) / ( 17.27 - ( (( 17.27 * temperature ) / ( 237.7 + temperature )) + logf( huminidity/100 ) ) );
+		printf("TT: %.2f C \r\n",dewpoint_temperature);
+		
+#endif
+
+
+	  // 1 hPa = 1 Pa
+	  // 1 hPa = 1 mbar
+	  // 1 mmHg = 1 mbar / 1.333
+
+	  printf("Pres: %d Pa \r\n", pressure );						//	Pa - в Паскалях    
+	  printf("Pres: %d hPa \r\n", ( pressure / 100 ) );				// hPa - в гектопаскаль
+	  printf("Pres: %.2f mmHg \r\n", (pressure / 100) / 1.333 );	// mmHg - в ​​милиметрах ртутного столба
+	  
+
+#ifdef BME280
+
+	  printf("Hum: %.2f %% \r\n",huminidity);
+	  
+#endif
+	
+	printf("\r\n"); 
+	HAL_Delay(1000);
+  
+  /////////////////////////////////////////////////////////////////////////////////////
+  
+  
+	.........
+	.........
+	.........
+	.........
+
+=== end while(1) ==================================================================================================================
+=== end main() ====================================================================================================================
